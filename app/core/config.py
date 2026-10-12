@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # --------------------------------------------------
     # Pinecone
     # --------------------------------------------------
-    pinecone_index_name: str = "sample_knowledgebase"
+    pinecone_index_name: str = "sample-knowledgebase"
     pinecone_namespace: str = "company-it-support"
 
     # --------------------------------------------------
