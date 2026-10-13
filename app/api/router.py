@@ -46,9 +46,16 @@ def chat(payload: ChatRequest):
         }
 
     except Exception as e:
+        err_str = str(e)
+        if "free-models-per-day" in err_str or "Rate limit exceeded" in err_str or "429" in err_str:
+            clean_msg = "OpenRouter Daily Free Limit Exceeded (429): You have used all 50 free requests for today on this OpenRouter account. Please provide a fresh OpenRouter API key or add credits to continue."
+            raise HTTPException(
+                status_code=429,
+                detail=clean_msg
+            )
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail=err_str
         )
 
 

@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # --------------------------------------------------
     # LLM / Embeddings
     # --------------------------------------------------
-    llm_provider: str = "gemini"  # "gemini" (1.3s, active quota) or "openrouter"
+    llm_provider: str = "openrouter"  # "openrouter" as requested
     openrouter_model: str = "nvidia/nemotron-3.5-lightning:free"
     groq_model: str = "qwen/qwen3.8-27b"
     gemini_model: str = "gemini-2.5-flash"

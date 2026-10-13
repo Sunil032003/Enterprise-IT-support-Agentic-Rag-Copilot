@@ -31,28 +31,21 @@ def get_text(response):
 def get_llm():
     global _llm
     if _llm is None:
-        provider = getattr(settings, "llm_provider", "gemini").lower()
-        if provider == "openrouter":
-            api_key = settings.openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
-            model_name = getattr(settings, "openrouter_model", "nvidia/nemotron-3.5-lightning:free")
-            _llm = ChatOpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=api_key,
-                model=model_name,
-                temperature=0,
-                max_tokens=600,
-                default_headers={
-                    "HTTP-Referer": "http://localhost:8000",
-                    "X-Title": "Enterprise IT Support Agentic RAG Copilot"
-                }
-            )
-        else:
-            model_name = getattr(settings, "gemini_model", "gemini-2.5-flash")
-            _llm = ChatGoogleGenerativeAI(
-                model=model_name,
-                google_api_key=settings.gemini_api_key,
-                temperature=0
-            )
+        api_key = settings.openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
+        model_name = getattr(settings, "openrouter_model", "nvidia/nemotron-3.5-lightning:free")
+        _llm = ChatOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+            model=model_name,
+            temperature=0,
+            max_tokens=600,
+            max_retries=1,
+            timeout=15,
+            default_headers={
+                "HTTP-Referer": "http://localhost:8000",
+                "X-Title": "Enterprise IT Support Agentic RAG Copilot"
+            }
+        )
     return _llm
 
 def get_web_search():
