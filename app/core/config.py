@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -22,6 +23,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     tavily_api_key: str = ""
     pinecone_api_key: str = ""
+    groq_api_key: str = ""
+    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
 
     # --------------------------------------------------
     # Pinecone
@@ -32,7 +35,10 @@ class Settings(BaseSettings):
     # --------------------------------------------------
     # LLM / Embeddings
     # --------------------------------------------------
-    gemini_model: str = "gemini-3.8-flash"
+    llm_provider: str = "gemini"  # "gemini" (1.3s, active quota) or "openrouter"
+    openrouter_model: str = "nvidia/nemotron-3.5-lightning:free"
+    groq_model: str = "qwen/qwen3.8-27b"
+    gemini_model: str = "gemini-2.5-flash"
     embedding_model: str = "gemini-embedding-001"
 
     # --------------------------------------------------
@@ -44,7 +50,7 @@ class Settings(BaseSettings):
     # --------------------------------------------------
     # Admin
     # --------------------------------------------------
-    admin_api_key: str = ""
+    admin_api_key: str = "change me"
 
     # --------------------------------------------------
     # Paths
@@ -52,6 +58,12 @@ class Settings(BaseSettings):
     audit_db_path: str = str(BASE_DIR / "data" / "audit.db")
     uploads_dir: str = str(BASE_DIR / "uploads")
     sample_kb_path: str = str(BASE_DIR / "data" / "sample_kb")
+
+    @property
+    def upload_dir(self) -> Path:
+        p = BASE_DIR / "uploads"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
 
     # --------------------------------------------------
     # Pydantic Settings

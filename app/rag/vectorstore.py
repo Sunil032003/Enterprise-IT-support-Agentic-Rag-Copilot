@@ -5,11 +5,16 @@ from langchain_pinecone import PineconeVectorStore
 from app.core.config import get_settings
 
 
+_vector_store = None
+_retriever = None
+
 def get_vector_store():
+    global _vector_store
+    if _vector_store is not None:
+        return _vector_store
 
     settings = get_settings()
 
-    
     # 1. Create embedding model
     embeddings = GoogleGenerativeAIEmbeddings(
         model=settings.embedding_model,
@@ -23,7 +28,6 @@ def get_vector_store():
 
     # 3. Create index if it doesn't exist
     if not pc.has_index(settings.pinecone_index_name):
-
         pc.create_index(
             name=settings.pinecone_index_name,
             dimension=3072,
@@ -40,13 +44,13 @@ def get_vector_store():
     )
 
     # 5. Create vector store
-    vector_store = PineconeVectorStore(
+    _vector_store = PineconeVectorStore(
         index=index,
         embedding=embeddings,
         namespace=settings.pinecone_namespace
     )
 
-    return vector_store
+    return _vector_store
 
 def add_documents_to_vector_store(documents):
 
@@ -56,16 +60,22 @@ def add_documents_to_vector_store(documents):
 
     return vector_store
 
+# Alias for router compatibility
+add_documents = add_documents_to_vector_store
+
 
 def get_retriever():
+    global _retriever
+    if _retriever is not None:
+        return _retriever
 
     # Get vector store
     vector_store = get_vector_store()
 
     # Create retriever
-    retriever = vector_store.as_retriever(
+    _retriever = vector_store.as_retriever(
         search_kwargs={"k": 3}
     )
 
-    return retriever
+    return _retriever
 

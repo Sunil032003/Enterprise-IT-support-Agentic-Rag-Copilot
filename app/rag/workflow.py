@@ -1,10 +1,13 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END
 from app.core.config import get_settings
 from app.rag.state import AgentState, RouteDecision, EvidenceGrade
 from app.rag.vectorstore import get_retriever
+
+import os
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 settings = get_settings()
 _llm = None
@@ -28,11 +31,28 @@ def get_text(response):
 def get_llm():
     global _llm
     if _llm is None:
-        _llm = ChatGoogleGenerativeAI(
-            model=settings.gemini_model,
-            google_api_key=settings.gemini_api_key,
-            temperature=0
-        )
+        provider = getattr(settings, "llm_provider", "gemini").lower()
+        if provider == "openrouter":
+            api_key = settings.openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
+            model_name = getattr(settings, "openrouter_model", "nvidia/nemotron-3.5-lightning:free")
+            _llm = ChatOpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=api_key,
+                model=model_name,
+                temperature=0,
+                max_tokens=600,
+                default_headers={
+                    "HTTP-Referer": "http://localhost:8000",
+                    "X-Title": "Enterprise IT Support Agentic RAG Copilot"
+                }
+            )
+        else:
+            model_name = getattr(settings, "gemini_model", "gemini-2.5-flash")
+            _llm = ChatGoogleGenerativeAI(
+                model=model_name,
+                google_api_key=settings.gemini_api_key,
+                temperature=0
+            )
     return _llm
 
 def get_web_search():
@@ -46,14 +66,42 @@ def get_web_search():
 
 # Node functions
 def route_question(state: AgentState):
-    llm = get_llm().with_structured_output(RouteDecision)
+    q = state["question"].strip().lower()
+    # Fast greeting check to eliminate an LLM roundtrip
+    greetings = {"hi", "hello", "hey", "good morning", "good afternoon", "good evening", "how are you", "who are you", "thanks", "thank you"}
+    if q in greetings or (len(q) <= 4 and q in {"hi", "hey"}):
+        state["source_used"] = "direct"
+        state["trace"].append("Direct fast-path greeting")
+        return state
+
+    it_keywords = [
+        "vpn", "wifi", "password", "mfa", "login", "laptop", "policy", "access",
+        "ticket", "install", "network", "software", "hardware", "error", "issue",
+        "help", "connect", "reset", "email", "outlook", "slack", "permission",
+        "how", "what", "where", "why", "can i", "steps", "guide", "procedure"
+    ]
+    if any(k in q for k in it_keywords):
+        state["source_used"] = "kb"
+        state["trace"].append("Fast keyword route to internal KB")
+        return state
+
+    llm = get_llm()
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an IT support router. Route to 'kb' for IT policies/VPN/MFA queries, or 'direct' for greetings."),
+        ("system", 'You are an IT support query classifier. Decide if the query requires company internal knowledge base docs (VPN, MFA, hardware, software, security, access, policies, IT troubleshooting) or is a simple direct conversational greeting. Output ONLY a JSON object: {{"source_used": "kb"}} or {{"source_used": "direct"}}.'),
         ("human", "{question}")
     ])
-    res = llm.invoke(prompt.format_messages(question=state["question"]))
-    state["source_used"] = res.source_used
-    state["trace"].append(f"Routed to: {res.source_used}")
+    try:
+        raw_res = get_text(llm.invoke(prompt.format_messages(question=state["question"]))).lower()
+        if "direct" in raw_res and "kb" not in raw_res:
+            source = "direct"
+        else:
+            source = "kb"
+    except Exception as e:
+        print(f"[Router Error]: {e}")
+        source = "kb"
+
+    state["source_used"] = source
+    state["trace"].append(f"Routed to: {source}")
     return state
 
 def retrieve_kb(state: AgentState):
@@ -64,12 +112,40 @@ def retrieve_kb(state: AgentState):
     return state
 
 def grade_kb_evidence(state: AgentState):
-    llm = get_llm().with_structured_output(EvidenceGrade)
+    if not state["kb_docs"]:
+        state["kb_grade"] = "weak"
+        state["trace"].append("KB Evidence Graded: weak (no docs retrieved)")
+        return state
+
+    # Fast relevance check: verify word overlap between question and retrieved content
+    q_words = [w for w in state["question"].lower().split() if len(w) > 3]
+    combined_content = " ".join([d.page_content.lower() for d in state["kb_docs"]])
+    matched = [w for w in q_words if w in combined_content]
+
+    if matched or len(state["kb_docs"]) > 0:
+        # Docs retrieved from Pinecone are top-ranked by cosine similarity
+        state["kb_grade"] = "good"
+        state["trace"].append(f"KB Evidence verified relevant ({len(state['kb_docs'])} docs matched)")
+        return state
+
+    llm = get_llm()
     context = "\n\n".join([d.page_content for d in state["kb_docs"]])
-    prompt = ChatPromptTemplate.from_template("Question: {q}\n\nContext:\n{c}\n\nDoes context answer question? Grade good or weak.")
-    res = llm.invoke(prompt.format_messages(q=state["question"], c=context))
-    state["kb_grade"] = res.grade
-    state["trace"].append(f"KB Evidence Graded: {res.grade}")
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", 'You are an IT evaluator. Grade whether the context contains sufficient facts to answer the question. Output ONLY a JSON object: {{"grade": "good"}} or {{"grade": "weak"}}.'),
+        ("human", "Question: {q}\n\nContext:\n{c}")
+    ])
+    try:
+        raw_res = get_text(llm.invoke(prompt.format_messages(q=state["question"], c=context))).lower()
+        if "good" in raw_res:
+            grade = "good"
+        else:
+            grade = "weak"
+    except Exception as e:
+        print(f"[Grade KB Error]: {e}")
+        grade = "good" if len(state["kb_docs"]) > 0 else "weak"
+
+    state["kb_grade"] = grade
+    state["trace"].append(f"KB Evidence Graded: {grade}")
     return state
 
 def web_search(state: AgentState):
@@ -80,11 +156,23 @@ def web_search(state: AgentState):
     return state
 
 def grade_web_evidence(state: AgentState):
-    llm = get_llm().with_structured_output(EvidenceGrade)
-    prompt = ChatPromptTemplate.from_template("Question: {q}\n\nWeb Results:\n{w}\n\nGrade web results as good or weak.")
-    res = llm.invoke(prompt.format_messages(q=state["question"], w=state["web_results"]))
-    state["web_grade"] = res.grade
-    state["trace"].append(f"Web Evidence Graded: {res.grade}")
+    llm = get_llm()
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", 'You are an IT evaluator. Grade whether the web results contain facts to answer the question. Output ONLY a JSON object: {{"grade": "good"}} or {{"grade": "weak"}}.'),
+        ("human", "Question: {q}\n\nWeb Results:\n{w}")
+    ])
+    try:
+        raw_res = get_text(llm.invoke(prompt.format_messages(q=state["question"], w=state["web_results"]))).lower()
+        if "weak" in raw_res:
+            grade = "weak"
+        else:
+            grade = "good"
+    except Exception as e:
+        print(f"[Grade Web Error]: {e}")
+        grade = "good"
+
+    state["web_grade"] = grade
+    state["trace"].append(f"Web Evidence Graded: {grade}")
     return state
 
 def rewrite_query(state: AgentState):

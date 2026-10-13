@@ -1,11 +1,12 @@
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from app.core.config import get_settings
 
 settings = get_settings()
 
 def init_db():
-    settings.audit_db_path.parent.mkdir(parents=True, exist_ok=True)
+    Path(settings.audit_db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(settings.audit_db_path)
     cursor = conn.cursor()
     cursor.execute("""

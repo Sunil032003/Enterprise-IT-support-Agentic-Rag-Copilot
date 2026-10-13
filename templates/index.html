@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enterprise IT Support - Agentic RAG Copilot</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'><path d='M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z'/><rect x='4' y='8' width='16' height='12' rx='2'/><path d='M9 13v2'/><path d='M15 13v2'/></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="app-wrapper">
+
+  <!-- ====================================================================
+       Header Bar
+       ==================================================================== -->
+  <header class="top-header">
+    <div class="header-left">
+      <div class="app-logo-box">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
+          <rect x="4" y="8" width="16" height="12" rx="2"/>
+          <path d="M9 13v2"/>
+          <path d="M15 13v2"/>
+        </svg>
+      </div>
+      <div class="header-title-box">
+        <span class="app-title">Enterprise IT Support</span>
+        <span class="app-subtitle">Agentic RAG Copilot</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="user-profile-badge" id="userProfileBtn">
+        <div class="user-avatar-circle">JD</div>
+        <span class="user-name">Sunil k</span>
+        <span class="user-caret">▾</span>
+      </div>
+    </div>
+  </header><!--  -->
+
+  <!-- ====================================================================
+       Three-Column Layout
+       ==================================================================== -->
+  <div class="main-viewport">
+
+    <!-- Column 1: Left Navigation -->
+    <aside class="left-nav-column">
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <nav class="nav-links-group">
+          <button class="nav-item active" id="navChatAssistant">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>Chat Assistant</span>
+          </button>
+        </nav>
+
+        <!-- Dedicated Vector Document Upload Card -->
+        <div class="sidebar-upload-card">
+          <div class="sidebar-upload-header">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span>Upload to Vector DB</span>
+          </div>
+
+          <!-- Blank place to enter Admin Key -->
+          <div class="sidebar-field-group">
+            <label class="sidebar-field-label" for="sidebarAdminKey">Admin API Key</label>
+            <input
+              type="password"
+              class="sidebar-input"
+              id="sidebarAdminKey"
+              placeholder="Enter Admin API Key..."
+              autocomplete="off"
+            />
+          </div>
+
+          <!-- Document Upload Option -->
+          <div class="sidebar-field-group">
+            <label class="sidebar-field-label">Document (.pdf, .docx, .md, .txt)</label>
+            <input type="file" id="sidebarFileInput" accept=".pdf,.txt,.docx,.md" style="display: none;" />
+            <div class="sidebar-file-box" id="sidebarFileBox">
+              <div class="sidebar-file-icon">📁</div>
+              <div class="sidebar-file-text">Click or drop file</div>
+              <div class="sidebar-file-selected" id="sidebarSelectedFileName">No file chosen</div>
+            </div>
+          </div>
+
+          <!-- Action Button -->
+          <button class="btn-upload-vector" id="sidebarUploadBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span>Index in Pinecone</span>
+          </button>
+
+          <!-- Status Feedback -->
+          <div id="sidebarUploadStatus"></div>
+        </div>
+      </div>
+
+      <div class="quick-help-card">
+        <div class="quick-help-header">
+          <div class="quick-help-icon">?</div>
+          <span>Quick Help</span>
+        </div>
+        <div class="quick-help-text">
+          Ask about VPN, MFA, IT policies, software access, or general IT support.
+        </div>
+      </div>
+    </aside>
+
+    <!-- Column 2: Center Main Chat -->
+    <main class="center-chat-card">
+      <div class="chat-card-header">
+        <div class="assistant-avatar-box">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
+            <rect x="4" y="8" width="16" height="12" rx="2"/>
+            <path d="M9 13v2"/>
+            <path d="M15 13v2"/>
+          </svg>
+        </div>
+        <div>
+          <div class="assistant-info-title">IT Support Assistant</div>
+          <div class="assistant-info-sub">Ask questions about IT policies, tools, access, and more.</div>
+        </div>
+      </div>
+
+      <!-- Messages Scroller -->
+      <div class="chat-scroll-area" id="chatScrollArea">
+        <!-- Rendered conversation bubbles will appear here -->
+      </div>
+
+      <!-- Bottom Input Dock -->
+      <div class="chat-input-bar-container">
+        <div class="chat-input-box">
+          <!-- Paperclip upload file button -->
+          <button class="btn-upload-clip" id="btnUploadClip" title="Upload knowledge file (.pdf, .docx, .md, .txt)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
+
+          <input
+            type="text"
+            class="main-text-input"
+            id="queryTextInput"
+            placeholder="Type your question here..."
+            autocomplete="off"
+          />
+
+          <button class="btn-send-message" id="btnSendQuery">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+            <span>Send</span>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Column 3: Right Inspector Panel -->
+    <aside class="right-inspector-column">
+      
+      <!-- Card 1: Source Used -->
+      <div class="inspector-card">
+        <div class="inspector-card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3"/>
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+          </svg>
+          <span>Source Used</span>
+        </div>
+        <div class="source-used-pill" id="sourceUsedDisplay">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+          <span id="sourceUsedText">Web Search (Tavily)</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Citations -->
+      <div class="inspector-card">
+        <div class="inspector-card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Citations</span>
+        </div>
+        <div id="citationsContainer">
+          <div class="citation-entry-box">
+            <div class="citation-header-row">
+              <a href="#" class="citation-link-text" id="citationMainLink">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span id="citationTitle">Tavily Web Search</span>
+              </a>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-light);"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </div>
+            <div class="citation-subtext" id="citationSnippet">General information on clinical research eligibility criteria</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Workflow Trace -->
+      <div class="inspector-card">
+        <div class="inspector-card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="18" cy="5" r="3"/>
+            <circle cx="6" cy="12" r="3"/>
+            <circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>
+          <span>Workflow Trace</span>
+        </div>
+        <div class="workflow-timeline" id="workflowTimelineContainer">
+          <!-- Timeline steps dynamically loaded -->
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+
+
+
+</div>
+
+<!-- Scripts -->
+<script src="/static/js/app.js"></script>
+</body>
+</html>

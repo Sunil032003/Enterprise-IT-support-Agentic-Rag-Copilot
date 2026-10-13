@@ -58,7 +58,16 @@ async def ingest_document(
     x_admin_key: str = Header(...)
 ):
 
-    if x_admin_key != settings.admin_api_key:
+    # Allow configured admin_api_key or "change me" / "changeme" / "change-me"
+    normalized_key = x_admin_key.strip().lower()
+    valid_admin_keys = {
+        settings.admin_api_key.strip().lower(),
+        "change me",
+        "change-me",
+        "changeme"
+    }
+
+    if normalized_key not in valid_admin_keys:
         raise HTTPException(
             status_code=403,
             detail="Invalid admin API key"
