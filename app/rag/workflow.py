@@ -14,33 +14,42 @@ _llm = None
 _web_search = None
 
 def get_text(response):
-    content = response.content
+    if not response:
+        return ""
 
-    if isinstance(content, str):
-        return content
+    content = getattr(response, "content", "")
+    if isinstance(content, str) and content.strip():
+        return content.strip()
 
     if isinstance(content, list):
-        return "".join(
+        text_blocks = "".join(
             block.get("text", "")
             for block in content
             if isinstance(block, dict)
         )
+        if text_blocks.strip():
+            return text_blocks.strip()
 
-    return str(content)
+    # Fallback to reasoning tokens if standard content was cut off
+    extra = getattr(response, "additional_kwargs", {})
+    if isinstance(extra, dict) and extra.get("reasoning"):
+        return str(extra["reasoning"]).strip()
+
+    return str(content) if content else ""
 
 def get_llm():
     global _llm
     if _llm is None:
         api_key = settings.openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
-        model_name = getattr(settings, "openrouter_model", "nvidia/nemotron-3.5-lightning:free")
+        model_name = getattr(settings, "openrouter_model", "nvidia/nemotron-3-super-120b-a12b:free")
         _llm = ChatOpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
             model=model_name,
             temperature=0,
-            max_tokens=600,
+            max_tokens=2048,
             max_retries=1,
-            timeout=15,
+            timeout=30,
             default_headers={
                 "HTTP-Referer": "http://localhost:8000",
                 "X-Title": "Enterprise IT Support Agentic RAG Copilot"
@@ -184,23 +193,50 @@ def generate_kb_answer(state: AgentState):
     llm = get_llm()
     context = "\n\n".join([d.page_content for d in state["kb_docs"]])
     prompt = ChatPromptTemplate.from_template("Answer based on internal IT docs:\n{c}\n\nQuestion: {q}")
-    res = llm.invoke(prompt.format_messages(c=context, q=state["question"]))
-    state["answer"] = get_text(res)
+    try:
+        res = llm.invoke(prompt.format_messages(c=context, q=state["question"]))
+        ans = get_text(res).strip()
+    except Exception as e:
+        print(f"[Generate KB Error]: {e}")
+        ans = f"Error generating answer from internal docs: {e}"
+
+    if not ans:
+        ans = "Relevant documentation was retrieved from the knowledge base, but the model returned an empty response. Please check your model configuration or OpenRouter quota."
+
+    state["answer"] = ans
     state["citations"] = [d.metadata.get("source", "Internal KB") for d in state["kb_docs"]]
     return state
 
 def generate_web_answer(state: AgentState):
     llm = get_llm()
     prompt = ChatPromptTemplate.from_template("Answer using web results:\n{w}\n\nQuestion: {q}")
-    res = llm.invoke(prompt.format_messages(w=state["web_results"], q=state["question"]))
-    state["answer"] = get_text(res)
+    try:
+        res = llm.invoke(prompt.format_messages(w=state["web_results"], q=state["question"]))
+        ans = get_text(res).strip()
+    except Exception as e:
+        print(f"[Generate Web Error]: {e}")
+        ans = f"Error generating answer from web search: {e}"
+
+    if not ans:
+        ans = "Web search returned information, but the model returned an empty response. Please check your model configuration or OpenRouter quota."
+
+    state["answer"] = ans
     state["citations"] = ["Tavily Web Search"]
     return state
 
 def direct_answer(state: AgentState):
     llm = get_llm()
-    res = llm.invoke(state["question"])
-    state["answer"] = get_text(res)
+    try:
+        res = llm.invoke(state["question"])
+        ans = get_text(res).strip()
+    except Exception as e:
+        print(f"[Direct Answer Error]: {e}")
+        ans = f"Error generating direct response: {e}"
+
+    if not ans:
+        ans = "The model returned an empty response. Please check your model configuration or OpenRouter quota."
+
+    state["answer"] = ans
     state["citations"] = ["Direct LLM"]
     return state
 
