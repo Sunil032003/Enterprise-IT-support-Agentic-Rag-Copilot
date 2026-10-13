@@ -100,7 +100,9 @@ async def ingest_document(
 
         return {
             "status": "success",
-            "message": f"Successfully ingested {file.filename}"
+            "message": f"Successfully ingested {file.filename}",
+            "file": file.filename,
+            "chunks": len(chunks)
         }
 
     except Exception as e:
