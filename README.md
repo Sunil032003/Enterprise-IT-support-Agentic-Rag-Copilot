@@ -1,410 +1,387 @@
- 	Enterprise IT Support Agentic RAG Copilot
-An end-to-end Forward Deployed Engineer (FDE) project that turns a notebook-style Agentic RAG workflow into a deployable internal product using LangGraph, FastAPI, Pinecone, Groq, Tavily, HTML, CSS, and JavaScript.
+# Enterprise IT Support Agentic RAG Copilot
 
-1. Business Problem
-Customer
-NovaRetail, a fictional 3,000-employee retail company.
+An enterprise-ready, Forward Deployed Engineering (FDE) Agentic RAG application that transforms static internal documentation into an intelligent, autonomous IT service copilot. 
 
-Problem
-The internal IT team maintains many documents: VPN instructions, password rules, MFA policy, software installation rules, laptop troubleshooting guides, and service-desk runbooks.
+Built with **LangGraph**, **FastAPI**, **Pinecone Serverless**, **OpenRouter / Gemini**, **Tavily Web Search**, and a modern dark-themed web interface.
 
-Employees still create repetitive support tickets because:
+---
 
-They do not know where the correct document is.
-Traditional keyword search returns too many results.
-A normal chatbot may hallucinate an answer.
-Internal documents can be incomplete or outdated.
-Some questions require current vendor information from the public web.
-Example
-An employee asks:
+## 1. Business Problem & Solution
 
-“How do I connect to the company VPN from home?”
+### The Challenge
+Internal enterprise IT support teams maintain extensive documentation across disparate systems:
+* VPN and remote access setups
+* Password reset and MFA policies
+* Laptop troubleshooting guides
+* Software installations and access privileges
+* Security runbooks and compliance policies
 
-The answer exists in the private company KB, so the system should not search the public internet.
+Despite having documentation, employees flood service desks with repetitive support tickets because:
+1. Keyword searches return fragmented or outdated results.
+2. Traditional chatbots hallucinate or fabricate troubleshooting instructions.
+3. Standard RAG pipelines cannot recognize when internal documents lack sufficient context to answer the question.
+4. Outages or vendor issues (e.g., Microsoft 365, Slack, Zoom) require live public web information that internal documentation cannot supply.
 
-Another employee asks:
+### The Agentic Solution
+Unlike naive RAG pipelines that execute a rigid `Retrieve → Generate` sequence, this **Agentic RAG Copilot** makes autonomous, stateful decisions:
+- **Private Knowledge First**: Prioritizes verified internal company policies stored in Pinecone vector search.
+- **Evidence Verification**: Evaluates retrieved document relevance before answering to avoid hallucinations.
+- **Dynamic Web Fallback**: Triggers Tavily web search only when private documentation is insufficient (e.g., third-party outages).
+- **Query Rewriting & Retry Guard**: Reformulates ambiguous queries and retries retrieval up to a bounded retry limit.
+- **Audit Logging**: Persists every query, source classification, and execution trace to an internal audit database.
+- **Self-Service Ingestion**: Allows authorized IT staff to index `.pdf`, `.docx`, `.md`, and `.txt` files directly through the UI.
 
-“What is the latest Microsoft Teams outage guidance?”
+---
 
-The internal KB may not contain current outage information. The system should recognize weak private evidence, use an external search, grade that evidence, and answer with an external-source warning.
+## 2. Agentic RAG Workflow Architecture
 
-Business Goal
-Build a secure IT Support Copilot that:
+```mermaid
+flowchart TD
+    Start([User Question]) --> Route[1. Route Question]
+    
+    Route -->|Greeting / Conversational| Direct[Direct LLM Answer]
+    Route -->|IT Support Query| RetrieveKB[2. Retrieve from Pinecone KB]
+    
+    RetrieveKB --> GradeKB{3. Grade KB Evidence}
+    
+    GradeKB -->|Relevant / Sufficient| GenKB[4a. Generate Grounded KB Answer]
+    GradeKB -->|Weak / Insufficient| WebSearch[4b. Tavily Web Search]
+    
+    WebSearch --> GradeWeb{5. Grade Web Evidence}
+    
+    GradeWeb -->|Relevant / Sufficient| GenWeb[6a. Generate Web Answer + Disclaimer]
+    GradeWeb -->|Weak & Retries Remaining| Rewrite[6b. Rewrite Query]
+    GradeWeb -->|Max Retries Exceeded| Insufficient[6c. Insufficient Evidence / Ticket Escalation]
+    
+    Rewrite --> RetrieveKB
+    
+    GenKB --> End([Return Answer + Sources + Trace])
+    GenWeb --> End
+    Direct --> End
+    Insufficient --> End
+```
 
-Searches trusted private knowledge first.
-Checks whether retrieved evidence is good enough.
-Uses web search only when private knowledge is insufficient.
-Rewrites weak queries and retries.
-Generates grounded answers.
-Shows the decision path for transparency and debugging.
-Lets authorized staff add new company documents.
-2. Why This Is an FDE Project
-A Forward Deployed Engineer does more than create an LLM notebook. The FDE must turn the customer's problem into a usable product.
+### LangGraph Workflow Nodes:
+1. **`route_question`**: Fast-paths standard conversational greetings (`hi`, `hello`) directly to the LLM, and routes IT technical inquiries to internal vector search.
+2. **`retrieve_kb`**: Embeds queries via high-dimensional vector embeddings and retrieves top-$k$ relevant chunks from Pinecone with connection pooling.
+3. **`grade_kb_evidence`**: Validates cosine relevance and keyword overlap to verify the retrieved chunks answer the prompt.
+4. **`web_search`**: Falls back to Tavily search to fetch external vendor information.
+5. **`grade_web_evidence`**: Evaluates web search results for factual relevance.
+6. **`rewrite_query`**: Intelligently expands and refines the query for another search attempt if initial evidence was weak.
+7. **`generate_kb_answer` / `generate_web_answer`**: Synthesizes grounded answers citing specific internal document files or external web URLs.
+8. **`audit`**: Persists question, source used (`kb`, `web`, `direct`), and execution trace into SQLite (`data/audit.db`).
 
-Customer Problem
-      ↓
-Discovery & Requirements
-      ↓
-Solution Architecture
-      ↓
-Data / Knowledge Integration
-      ↓
-Agentic RAG Development
-      ↓
-API Development
-      ↓
-User Interface
-      ↓
-Security + Audit + Testing
-      ↓
-Deployment
-      ↓
-Observe + Improve
-This repository demonstrates each layer.
+---
 
-3. Simple Architecture
-                   ┌─────────────────────┐
-                   │   Employee / User   │
-                   └──────────┬──────────┘
-                              │
-                              ▼
-                   ┌─────────────────────┐
-                   │ HTML/CSS/JavaScript │
-                   │      Web UI         │
-                   └──────────┬──────────┘
-                              │ POST /api/chat
-                              ▼
-                   ┌─────────────────────┐
-                   │       FastAPI       │
-                   └──────────┬──────────┘
-                              │
-                              ▼
-                   ┌─────────────────────┐
-                   │     LangGraph       │
-                   │ Agentic RAG Control │
-                   └──────────┬──────────┘
-                              │
-               ┌──────────────┴──────────────┐
-               │                             │
-               ▼                             ▼
-       ┌───────────────┐              ┌──────────────┐
-       │ Private KB    │              │ Tavily Web   │
-       │ Pinecone      │              │ Search       │
-       └───────┬───────┘              └──────┬───────┘
-               │                             │
-               └──────────────┬──────────────┘
-                              ▼
-                     ┌────────────────┐
-                     │ Groq LLM       │
-                     │ Grounded Answer│
-                     └────────────────┘
-4. Agentic RAG Workflow
-This follows the same core implementation pattern as the reference notebook.
+## 3. Technology Stack
 
-Question
-   ↓
-[1] Route Question
-   ├── Greeting / simple chat ─────────────→ Direct Answer
-   │
-   └── IT support question
-                ↓
-[2] Retrieve from Private Pinecone KB
-                ↓
-[3] Grade Private Evidence
-       ┌────────┴────────┐
-       │                 │
-     GOOD               WEAK
-       │                 │
-       ▼                 ▼
-Generate from KB    [4] Tavily Web Search
-                         ↓
-                  [5] Grade Web Evidence
-                    ┌────┴─────┐
-                    │          │
-                  GOOD        WEAK
-                    │          │
-                    ▼          ▼
-              Generate Web  [6] Rewrite Query
-                               ↓
-                         Retry Private KB
-                               ↓
-                        Max retry reached?
-                               ↓
-                    Insufficient Evidence
-Why Agentic?
-Normal RAG does approximately this:
+| Layer | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Agent Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) & [LangChain](https://github.com/langchain-ai/langchain) | Stateful agentic workflow, conditional branching, retry loops |
+| **LLM Inference** | [OpenRouter](https://openrouter.ai/) / [Google Gemini](https://ai.google.dev/) | High-speed response generation (`nvidia/nemotron-3.5-lightning:free`, `gemini-2.5-flash`) |
+| **Embeddings** | [Google Generative AI Embeddings](https://ai.google.dev/) (`gemini-embedding-001`) | High-dimensional (3072d) semantic vector embeddings |
+| **Vector Store** | [Pinecone Serverless](https://www.pinecone.io/) | Managed cloud vector database for enterprise document search |
+| **External Search** | [Tavily AI](https://tavily.com/) | Real-time web search fallback for external vendor outages and live guides |
+| **Backend API** | [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) | Async REST API, CORS middleware, Jinja2 templates |
+| **Document Ingestion** | `pypdf`, `python-docx`, `langchain-text-splitters` | Resilient PDF, Word, Markdown, and text parsing |
+| **Audit Database** | SQLite (`data/audit.db`) | Query tracking and trace history |
+| **Frontend UI** | HTML5, CSS3, Vanilla JS | Sleek dark-mode 3-column UI, real-time agent trace panel, modal uploader |
 
-Question → Retrieve → Generate
-This project makes decisions:
+---
 
-Question
- → Route
- → Retrieve
- → Evaluate evidence
- → Choose KB or Web
- → Rewrite if needed
- → Retry
- → Generate grounded answer
-The system therefore controls what to do next based on its current state.
+## 4. Project Directory Structure
 
-5. Main Technology Stack
-Layer	Technology	Purpose
-Agent workflow	LangGraph	Stateful routing and conditional decisions
-LLM	Groq	Routing, grading, rewriting, answer generation
-Embeddings	HuggingFace all-MiniLM-L6-v2	Local 384-dimensional embeddings
-Vector DB	Pinecone	Private enterprise knowledge base
-External search	Tavily	Fallback when company KB is insufficient
-API	FastAPI	Backend and REST endpoints
-Frontend	HTML/CSS/JavaScript	Employee-facing interface
-Audit	SQLite	Basic decision-path logging
-Packaging	Docker	Reproducible deployment
-6. Project Structure
-FDE_Agentic_RAG_IT_Copilot/
+```text
+Enterprise-IT-support-Agentic-Rag-Copilot/
 │
 ├── app/
 │   ├── api/
-│   │   └── routes.py              # Chat, health and ingestion APIs
-│   │
+│   │   ├── __init__.py
+│   │   └── router.py              # REST API endpoints (/chat, /ingest, /health)
 │   ├── core/
-│   │   ├── config.py              # Environment configuration
-│   │   └── logging.py             # Logging configuration
-│   │
+│   │   ├── __init.py
+│   │   ├── config.py              # Pydantic environment settings & singleton
+│   │   └── logging.py             # System logger configuration
 │   ├── rag/
-│   │   ├── state.py               # LangGraph state + structured decisions
-│   │   ├── vectorstore.py         # Pinecone + embeddings
-│   │   └── workflow.py            # Complete Agentic RAG graph
-│   │
+│   │   ├── __init__.py
+│   │   ├── state.py               # TypedDict agent state & decision schemas
+│   │   ├── vectorstore.py         # Pinecone connection pooling & retriever
+│   │   └── workflow.py            # LangGraph workflow compilation & execution
 │   ├── services/
-│   │   ├── audit.py               # SQLite query audit
-│   │   └── ingestion.py           # PDF/TXT/MD/DOCX loading + chunking
-│   │
-│   └── main.py                    # FastAPI application
+│   │   ├── __init__.py
+│   │   ├── audit.py               # SQLite audit persistence
+│   │   └── ingestion.py           # Multi-format document parser & chunker
+│   └── main.py                    # FastAPI entrypoint, static & template mounts
 │
 ├── data/
-│   └── sample_kb/
-│       ├── company_it_handbook.md
-│       └── service_desk_runbook.md
+│   ├── sample_kb/                 # Base IT support handbooks & guides
+│   │   ├── company-it-handbook.md
+│   │   └── It-service-handbook.md
+│   └── audit.db                   # SQLite query audit trail
 │
 ├── static/
-│   ├── css/style.css
-│   └── js/app.js
+│   ├── css/
+│   │   └── style.css              # Dark theme styling, layout grid, and badges
+│   └── js/
+│       └── app.js                 # Chat interactions, modal logic, trace renderer
 │
 ├── templates/
-│   └── index.html
+│   └── index.html                 # 3-column UI: Sidebar, Chat Area, Trace Monitor
 │
-├── tests/
-│   └── test_ingestion.py
-│
-├── uploads/
-├── .env.example
-├── Dockerfile
-├── ingest_sample_kb.py
-├── requirements.txt
-├── run.py
-└── README.md
-7. Setup
-Step 1 — Create virtual environment
+├── uploads/                       # Temporary storage for uploaded documents
+├── .env.example                   # Environment variable template
+├── .gitignore                     # Git ignore rules (.env, venv, caches)
+├── ingest_sample_kb.py            # Bulk indexing script for sample documents
+├── requirements.txt               # Python package dependencies
+├── run.py                         # Application launcher script
+└── README.md                      # Project documentation
+```
+
+---
+
+## 5. Prerequisites & Environment Setup
+
+### 1. Prerequisites
+* Python 3.10, 3.11, or 3.12
+* A [Pinecone](https://www.pinecone.io/) account and API key
+* An [OpenRouter](https://openrouter.ai/) account and API key (or Google Gemini API key)
+* A [Tavily](https://tavily.com/) API key (for web search fallback)
+
+### 2. Clone the Repository
+```bash
+git clone https://github.com/Sunil032003/Enterprise-IT-support-Agentic-Rag-Copilot.git
+cd Enterprise-IT-support-Agentic-Rag-Copilot
+```
+
+### 3. Create and Activate a Virtual Environment
+**Windows (PowerShell):**
+```powershell
 python -m venv venv
-Windows:
+.\venv\Scripts\Activate.ps1
+```
 
-venv\Scripts\activate
-macOS/Linux:
-
+**macOS / Linux:**
+```bash
+python3 -m venv venv
 source venv/bin/activate
-Step 2 — Install dependencies
+```
+
+### 4. Install Dependencies
+```bash
 pip install -r requirements.txt
-Step 3 — Configure environment
-Create a .env file in the project root directory with the following variables:
+```
 
-# LLM API Keys
-GROQ_API_KEY=your_groq_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
+### 5. Configure Environment Variables
+Copy the example configuration to `.env`:
+```bash
+cp .env.example .env
+```
 
-# External Search
-TAVILY_API_KEY=your_tavily_api_key_here
+Open `.env` and fill in your API credentials:
 
-# Vector Database (Pinecone)
-PINECONE_API_KEY=your_pinecone_api_key_here
-PINECONE_INDEX_NAME=fde-it-support-rag
-PINECONE_NAMESPACE=company-it-kb
+```dotenv
+# ==============================================================================
+# LLM Provider Configuration ("openrouter" or "gemini")
+# ==============================================================================
+LLM_PROVIDER=openrouter
 
-# LLM Models
-GROQ_MODEL=openai/gpt-oss-20b
-OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-small
+# OpenRouter API Configuration
+OPENROUTER_API_KEY="sk-or-v1-your-openrouter-key-here"
+OPENROUTER_MODEL="nvidia/nemotron-3.5-lightning:free"
 
-# Security
-ADMIN_API_KEY=change-me-in-production
+# Google Gemini API Configuration (Used for Pinecone embeddings)
+GEMINI_API_KEY="your-gemini-api-key-here"
+GEMINI_MODEL=gemini-2.5-flash
+EMBEDDING_MODEL=gemini-embedding-001
 
-# Application Settings
-APP_ENV=development
-Environment Variable Reference
-Variable	Description	Example	Required
-GROQ_API_KEY	API key for Groq LLM (routing, grading, generation)	gsk_...	✅ Yes
-OPENAI_API_KEY	API key for OpenAI (embeddings and fallback LLM)	sk-...	✅ Yes
-TAVILY_API_KEY	API key for Tavily web search	tvly-...	✅ Yes
-PINECONE_API_KEY	API key for Pinecone vector database	pckey-...	✅ Yes
-PINECONE_INDEX_NAME	Pinecone index name	fde-it-support-rag	⚠️ Optional (default: fde-it-support-rag)
-PINECONE_NAMESPACE	Pinecone namespace for document isolation	company-it-kb	⚠️ Optional (default: company-it-kb)
-GROQ_MODEL	Groq model identifier	openai/gpt-oss-20b	⚠️ Optional (default: openai/gpt-oss-20b)
-OPENAI_MODEL	OpenAI model identifier	gpt-4o-mini	⚠️ Optional (default: gpt-4o-mini)
-EMBEDDING_MODEL	Embedding model for vectorization	text-embedding-3-small	⚠️ Optional (default: text-embedding-3-small)
-ADMIN_API_KEY	Secret key for admin endpoints (document ingestion)	your-secure-key	⚠️ Optional (default: change-me)
-APP_ENV	Application environment	development or production	⚠️ Optional (default: development)
-⚠️ Important Security Notes:
+# Pinecone Vector Database Configuration
+PINECONE_API_KEY="pcsk_your-pinecone-api-key-here"
+PINECONE_INDEX_NAME="sample-knowledgebase"
+PINECONE_NAMESPACE="company-it-support"
 
-Never commit .env to version control. Add it to .gitignore.
-Change ADMIN_API_KEY to a secure random value in production.
-Use environment variables instead of hardcoding secrets.
-Restrict API key access to only the services that need them.
-Step 4 — Load sample company knowledge
+# External Web Search (Tavily)
+TAVILY_API_KEY="tvly-your-tavily-api-key-here"
+
+# Document Upload & Administration Key
+ADMIN_API_KEY="change me"
+```
+
+> **Security Note**: Never commit your `.env` file to Git. It is automatically ignored by `.gitignore`.
+
+---
+
+## 6. How to Run the Application
+
+### Step 1: Ingest Initial Knowledge Base
+Before starting the server, seed your Pinecone vector database with the company's internal IT handbooks:
+```bash
 python ingest_sample_kb.py
-This demonstrates the RAG ingestion pipeline:
+```
+*Output:*
+```text
+Total chunks to add: 87
+Successfully ingested sample KB into Pinecone!
+```
 
-Company Documents
-   ↓
-Load Documents
-   ↓
-Chunk Text
-   ↓
-HuggingFace Embeddings
-   ↓
-Pinecone Vector Database
-Step 5 — Run the application
+### Step 2: Start the Web Server
+Launch the application using either of the following commands:
+
+**Option A (Using runner script):**
+```bash
 python run.py
-Open:
+```
 
-http://127.0.0.1:8000
-FastAPI API docs:
+**Option B (Using Uvicorn directly):**
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
 
-http://127.0.0.1:8000/docs
-8. Classroom Demo Scenarios
-Demo A — Private KB Success
-Ask:
+### Step 3: Access the Application
+* **Web UI**: Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
+* **Interactive OpenAPI Docs**: Visit [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
-How do I connect to the company VPN from home?
+---
 
-Expected path:
+## 7. Interactive UI & User Guide
 
-Router → KB
-Private KB Retrieval
-KB Grade → GOOD
-Generate from Private KB
-Teaching point:
+The web application features an intuitive, 3-column layout:
 
-Trusted internal company knowledge is preferred. No public web call is necessary.
+1. **Left Sidebar**:
+   - Project overview and badge.
+   - Interactive breakdown of the 6-step LangGraph workflow.
+   - **`+ Add Company Document`** button to launch the ingestion modal.
 
-Demo B — Company Policy Question
-Ask:
+2. **Center Chat Area**:
+   - Pre-configured quick-prompt buttons for instant testing.
+   - Conversational bubbles clearly separating User messages from Assistant responses.
+   - Grounded citations linking directly to the source document or search origin.
+   - Source badge (`KB`, `TAVILY WEB SEARCH`, `DIRECT`).
 
-Can IT support ask me to share my MFA code?
+3. **Right-Hand Agent Trace Panel**:
+   - Displays real-time decision logs produced by LangGraph (e.g., `Routed to: kb`, `Retrieved 3 docs from Pinecone KB`, `KB Evidence verified relevant`).
+   - Shows the final resolved source.
 
-The internal handbook says employees must never share passwords or MFA codes with support personnel.
+---
 
-Expected path:
+## 8. Adding New Company Documents (Self-Service Ingestion)
 
-Router → KB
-Private KB Retrieval
-KB Grade → GOOD
-Private KB Answer
-Teaching point:
+Authorized team members can upload internal documents dynamically without restarting the server:
 
-RAG allows the model to answer using company-specific information it was never trained on.
+1. Click **`+ Add Company Document`** in the sidebar.
+2. In the modal:
+   - Enter the **Admin API Key** (configured as `"change me"` in `.env`).
+   - Select a `.pdf`, `.docx`, `.md`, or `.txt` file.
+   - Click **Index Document**.
+3. The server runs the ingestion pipeline:
+   - Resilient stream reading (handles corrupt and standard PDFs).
+   - Text extraction and Recursive Character Chunking (chunk size: 1000, overlap: 200).
+   - High-dimensional vector embedding.
+   - Upsert into Pinecone under the configured namespace.
+4. The document is **immediately searchable** in subsequent queries.
 
-Demo C — External / Current Information
-Ask:
+---
 
-What is the latest Microsoft Teams outage guidance?
+## 9. REST API Reference
 
-Expected path when internal documents do not answer it:
-
-Router → KB
-Private KB Retrieval
-KB Grade → WEAK
-Tavily Search
-Web Grade → GOOD
-Web Answer
-Teaching point:
-
-Agentic RAG can choose another information source rather than blindly answering from irrelevant vectors.
-
-Demo D — Query Rewrite
-Ask a deliberately vague question such as:
-
-My work communication app is acting strange after the new update. What should I do?
-
-If both KB and first external retrieval are weak, the workflow can rewrite the query and retry.
-
-Teaching point:
-
-Retrieval failure does not immediately mean failure. An agent can improve the search query and try again while using a retry guard to avoid loops.
-
-Demo E — Direct Conversation
-Ask:
-
-Hello!
-
-Expected path:
-
-Router → DIRECT
-Direct Answer
-Teaching point:
-
-Not every message should trigger expensive vector search or web search.
-
-9. Document Upload Demo
-The sidebar contains Add Company Document.
-
-Use the ADMIN_API_KEY from .env.
-
-Upload one of:
-
-.pdf
-.txt
-.md
-.docx
-The backend performs:
-
-Upload
-  ↓
-Validate Type
-  ↓
-Load Text
-  ↓
-Recursive Chunking
-  ↓
-Embeddings
-  ↓
-Pinecone Indexing
-  ↓
-Immediately Available for Retrieval
-This is useful in an FDE demonstration because the customer does not want to edit Python every time a new policy is published.
-
-10. API Endpoints
-GET /api/health
-Health check.
-
-POST /api/chat
-Request:
-
+### 1. Health Check
+* **Endpoint**: `GET /api/health`
+* **Response**:
+```json
 {
-  "question": "How do I reset my company password?"
+  "status": "ok",
+  "service": "Enterprise IT Support Agentic RAG Copilot"
 }
-Response contains:
+```
 
+---
+
+### 2. Chat with the Agent
+* **Endpoint**: `POST /api/chat`
+* **Headers**: `Content-Type: application/json`
+* **Request Body**:
+```json
 {
-  "answer": "...",
-  "source_used": "private_kb",
+  "question": "How do I connect to the company VPN from home?"
+}
+```
+* **Success Response (200 OK)**:
+```json
+{
+  "answer": "To connect to the company VPN from home, follow these steps:\n1. Open the company-approved VPN client...\n2. Authenticate using your corporate email and password...",
+  "source_used": "kb",
   "trace": [
-    "Router → KB",
-    "Private KB retrieval → 4 chunks",
-    "KB evidence grade → GOOD",
-    "Answer generation → PRIVATE KB"
+    "Fast keyword route to internal KB",
+    "Retrieved 3 docs from Pinecone KB.",
+    "KB Evidence verified relevant (3 docs matched)"
   ],
-  "citations": []
+  "citations": [
+    "data/sample_kb/company-it-handbook.md"
+  ]
 }
-POST /api/ingest
-Protected by the X-Admin-Key request header.
+```
 
-Uploads a document and adds its chunks to Pinecone.
+---
 
+### 3. Ingest a Document
+* **Endpoint**: `POST /api/ingest`
+* **Headers**:
+  * `X-Admin-Key: change me`
+  * `Content-Type: multipart/form-data`
+* **Form Data**:
+  * `file`: Uploaded file (`.pdf`, `.docx`, `.md`, `.txt`)
+* **Success Response (200 OK)**:
+```json
+{
+  "status": "success",
+  "message": "Successfully ingested network_troubleshooting.pdf",
+  "file": "network_troubleshooting.pdf",
+  "chunks": 12
+}
+```
+
+---
+
+## 10. Verification & Test Scenarios
+
+Try these queries in the interface to verify all agentic decision paths:
+
+| Query Type | Example Prompt | Expected Path |
+| :--- | :--- | :--- |
+| **Conversational Greeting** | *"Hello, who are you?"* | Fast-path routing → Direct LLM response (No vector or web call) |
+| **Internal Policy (Private KB)** | *"How do I connect to the company VPN?"* | Route KB → Pinecone Retrieval → Relevance Grade (Good) → Grounded KB Answer |
+| **Security Rule** | *"Can IT support ask for my MFA code?"* | Route KB → Pinecone Retrieval → Grounded answer stating MFA codes are strictly confidential |
+| **External Live Information** | *"What is the latest status on Microsoft Teams outage?"* | Route KB → Retrieval Weak → Tavily Web Search → Grounded Web Answer with search citation |
+| **Vague / Complex Query** | *"My app is crashing with error 0x8004"* | Route KB → Grade Weak → Tavily Fallback → Query Rewrite → Re-evaluate |
+
+---
+
+## 11. Troubleshooting & FAQs
+
+### Q: Why do I see `OpenRouter Daily Free Limit Exceeded (429)`?
+**A**: Free tier models on OpenRouter have a limit of 50 requests per day per account. When this quota is reached:
+* Add \$5 credits to your OpenRouter account to unlock 1,000 requests per day.
+* Or generate a new API key from a secondary free account and update `OPENROUTER_API_KEY` in `.env`.
+
+### Q: Why do I get a port conflict error (`[Errno 10048] address already in use`)?
+**A**: Another instance of Uvicorn is holding port 8000. Terminate the existing process:
+* **Windows (PowerShell)**:
+  ```powershell
+  Get-NetTCPConnection -LocalPort 8000 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+  ```
+* **macOS / Linux**:
+  ```bash
+  kill -9 $(lsof -t -i:8000)
+  ```
+
+### Q: Can I run this with Docker?
+**A**: Yes. Build and run the container:
+```bash
+docker build -t it-support-copilot .
+docker run -p 8000:8000 --env-file .env it-support-copilot
+```
+
+---
+
+## 12. License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

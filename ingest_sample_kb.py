@@ -10,7 +10,7 @@ for doc in Path("data/sample_kb").glob("*"):
         loaded_doc=load_file(doc)
         chunked_doc=chunk_documents(loaded_doc)
         all_docs.extend(chunked_doc)
-print(f"Total documents to add: {len(loaded_doc)}")
-print(len(chunked_doc))
+print(f"Total chunks to add: {len(all_docs)}")
 add_documents_to_vector_store(all_docs)
+print("Successfully ingested sample KB into Pinecone!")
 
